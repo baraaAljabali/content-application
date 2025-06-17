@@ -1,0 +1,78 @@
+version: '3.8'
+services:
+  db:
+    image: postgres
+    restart: always
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    ports:
+      - 5433:5432
+
+    environment:
+      - POSTGRES_DB=ContentUsersDB
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+  dynamodb-local:
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    image: "amazon/dynamodb-local:latest"
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    restart: always
+    volumes:
+      - "./data/dynamo:/home/dynamodblocal/data"
+    working_dir: /home/dynamodblocal
+
+  dynamodb: 
+    image: "aaronshaf/dynamodb-admin"
+    container_name: dynamodb-admin
+    depends_on:
+      - dynamodb-local
+    restart: always
+    ports:
+      - "8001:8001"
+    environment:
+      - DYNAMO_ENDPOINT=http://dynamodb-local:8000
+      - AWS_REGION=ap-southeast-1
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: opensearch
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200:9200
+      - 9600:9600
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+  app:
+    build: .
+    ports:
+      - 3000:3000
+    environment:
+      - NODE_ENV=production
+      - jwt_secret=thmanyahsecretjwt
+      - DY_REGION=local
+    command: npm run start:prod
+    depends_on:
+      - db
+      - dynamodb-local
+      - opensearch
+      
+volumes:
+  opensearch-data:
+    driver: local
